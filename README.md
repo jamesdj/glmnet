@@ -2,7 +2,7 @@
 Python wrapper around glmnet R package for generalized linear models,
 providing scikit-learn style estimators.
 
-The glmnet R package was written by the creators of the lasso and elastic net. 
+The [glmnet](https://web.stanford.edu/~hastie/glmnet/glmnet_alpha.html) R package was written by the creators of the lasso and elastic net. 
 It is highly optimized and tends to outdo other implementations 
 in both model performance and speed.  
 
