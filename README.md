@@ -2,7 +2,11 @@
 Python wrapper around glmnet R package for generalized linear models,
 providing scikit-learn style estimators.
 
-Supports linear, logistic, and multinomial (multi-class) models.
+The glmnet R package was written by the creators of the lasso and elastic net. 
+It is highly optimized and tends to outdo other implementations 
+in both model performance and speed.  
+
+Currently supports basic linear, logistic, and multinomial (multi-class) models.
 
 To install dependencies:
 ```

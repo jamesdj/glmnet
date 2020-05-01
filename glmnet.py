@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.base import BaseEstimator, RegressorMixin, ClassifierMixin
+from sklearn.model_selection import check_cv
 
 import rpy2.robjects as ro
 from rpy2.robjects.packages import importr
@@ -18,6 +19,7 @@ as_null = ro.r['as.null']
 
 """
 TODO:
+- support passing in fold indices and selecting numbers of folds
 - Add more detail about parameters in docstrings
   - list what options are supported for each model, such as losses
 - use intercept and coefficients to predict etc. without invoking R?
@@ -38,6 +40,8 @@ REG_TYPE2FAMILY = {
     'logistic': 'binomial',
     'multinomial': 'multinomial',
 }
+
+CLASSIFICATION_REG_TYPES = ['logistic', 'multinomial']
 
 
 def with_numpy2ri(func):
@@ -72,11 +76,13 @@ class GLMNetCV(BaseEstimator):
                  lower=None,
                  upper=None,
                  loss_metric='mse',
-                 alpha=0.5):
+                 alpha=0.5,
+                 cv=None):
         self.lower = lower
         self.upper = upper
         self.loss_metric = loss_metric
         self.alpha = alpha
+        self.cv = cv
 
         # Assigned in inheriting classes
         self.intercept_ = None
@@ -114,6 +120,7 @@ class GLMNetCV(BaseEstimator):
                                 self.upper,
                                 loss_metric=self.loss_metric,
                                 alpha=self.alpha,
+                                cv=self.cv,
                                 class_weight=self.class_weight,
                                 sample_weight=sample_weight)
 
@@ -199,7 +206,7 @@ class GLMNetClassifierCV(GLMNetCV, ClassifierMixin):
             Predicted probabilities of class membership for each sample.
         """
         raw_pred_proba = self._pred(x, pred_type='response')
-        pred_proba = np.array(raw_pred_proba).T[0]
+        pred_proba = np.squeeze(np.array(raw_pred_proba))
         return pred_proba
 
 
@@ -247,6 +254,11 @@ class GLMNetLinearRegressionCV(GLMNetRegressionCV):
         Which loss metric to minimize.
     alpha: float, default=0.5
         Balance of L1 and L2 regularization
+    cv: int, cross-validation generator or an iterable, optional, default=None
+        Determines the cross-validation splitting strategy. See documentation
+        for sklearn.model_selection.check_cv. Cross-validation strategies with
+        overlapping folds are not supported.
+
 
     See Also
     --------
@@ -257,11 +269,13 @@ class GLMNetLinearRegressionCV(GLMNetRegressionCV):
                  lower=None,
                  upper=None,
                  loss_metric='mse',
-                 alpha=0.5):
+                 alpha=0.5,
+                 cv=None):
         super().__init__(lower=lower,
                          upper=upper,
                          loss_metric=loss_metric,
-                         alpha=alpha)
+                         alpha=alpha,
+                         cv=cv)
         self.reg_type = 'linear'
 
 
@@ -281,6 +295,10 @@ class GLMNetLogisticRegressionCV(GLMNetClassifierCV):
         Which loss metric to minimize.
     alpha: float, default=0.5
         Balance of L1 and L2 regularization
+    cv: int, cross-validation generator or an iterable, optional, default=None
+        Determines the cross-validation splitting strategy. See documentation
+        for sklearn.model_selection.check_cv. Cross-validation strategies with
+        overlapping folds are not supported.
     class_weight: dict or ‘balanced’, default=None
         Weights associated with classes. As in sklearn.
 
@@ -293,11 +311,13 @@ class GLMNetLogisticRegressionCV(GLMNetClassifierCV):
                  upper=None,
                  loss_metric='mse',
                  alpha=0.5,
+                 cv=None,
                  class_weight=None):
         super().__init__(lower=lower,
                          upper=upper,
                          loss_metric=loss_metric,
                          alpha=alpha,
+                         cv=cv,
                          class_weight=class_weight)
         self.reg_type = 'logistic'
 
@@ -318,6 +338,10 @@ class GLMNetMultinomialRegressionCV(GLMNetClassifierCV):
         Which loss metric to minimize.
     alpha: float, default=0.5
         Balance of L1 and L2 regularization
+    cv: int, cross-validation generator or an iterable, optional, default=None
+        Determines the cross-validation splitting strategy. See documentation
+        for sklearn.model_selection.check_cv. Cross-validation strategies with
+        overlapping folds are not supported.
     class_weight: dict or ‘balanced’, default=None
         Weights associated with classes. As in sklearn.
 
@@ -330,11 +354,13 @@ class GLMNetMultinomialRegressionCV(GLMNetClassifierCV):
                  upper=None,
                  loss_metric='mse',
                  alpha=0.5,
+                 cv=None,
                  class_weight=None):
         super().__init__(lower=lower,
                          upper=upper,
                          loss_metric=loss_metric,
                          alpha=alpha,
+                         cv=cv,
                          class_weight=class_weight)
         self.reg_type = 'multinomial'
 
@@ -388,6 +414,7 @@ def glmnet_fit(x,
                upper=None,
                loss_metric='mse',
                alpha=0.5,
+               cv=None,
                class_weight=None,
                sample_weight=None):
     """
@@ -426,6 +453,7 @@ def glmnet_fit(x,
     """
     lower = float('-inf') if lower is None else lower
     upper = float('inf') if upper is None else upper
+    foldid = make_foldid(cv, reg_type, x, y)
     if reg_type in ['logistic', 'multinomial']:
         class_weights = compute_class_weight(class_weight, np.unique(y), y)
         sample_weight = [class_weights[int(y[i])] for i in range(len(y))]
@@ -440,8 +468,25 @@ def glmnet_fit(x,
                            upper=upper,
                            alpha=alpha,
                            weights=sample_weight,
-                           **{"type.measure": loss_metric})
+                           #nfolds=nfolds,
+                           foldid=foldid,
+                           **{'type.measure': loss_metric})
     return fit
+
+
+def make_foldid(cv, reg_type, x, y):
+    classifier = reg_type in CLASSIFICATION_REG_TYPES
+    checked_cv = check_cv(cv=cv,
+                          y=y if classifier else None,
+                          classifier=classifier)
+    fg = checked_cv.split(x, y) if classifier else checked_cv.split(x)
+    fold_idx = 1
+    sample_to_fold = {}
+    for train, test in fg:
+        for sample in test:
+            sample_to_fold[sample] = fold_idx
+        fold_idx += 1
+    return np.array(list(zip(*sorted(sample_to_fold.items())))[1])
 
 
 def get_attr_from_glmnet_fit(fit, attr):
