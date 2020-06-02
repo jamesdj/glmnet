@@ -188,14 +188,14 @@ class GLMNetClassifierCV(GLMNetCV, ClassifierMixin):
         ----------
         x: array-like of shape (n_samples, n_features)
             Data to predict from.
+        offset: : array-like of shape (n_samples,), default=None
+            Fixed vector of n_samples numbers that is added into the linear
+             predictor. Can be output of another fitted model.
 
         Returns
         -------
         pred : array-like
             Predicted probabilities of class membership for each sample.
-        offset: : array-like of shape (n_samples,), default=None
-            Fixed vector of n_samples numbers that is added into the linear
-             predictor. Can be output of another fitted model.
 
         """
         raw_pred = self._pred(x, pred_type='class', offset=offset)
