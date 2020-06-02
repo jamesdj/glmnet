@@ -13,3 +13,8 @@ To install dependencies:
 conda install numpy pandas scikit-learn rpy2
 Rscript -e 'install.packages("glmnet", repos="https://cloud.r-project.org")'
 ```
+On some systems, it may be necessary to run
+```
+conda install -c r libiconv
+```
+prior to the `Rscript` command.
