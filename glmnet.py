@@ -526,7 +526,7 @@ def glmnet_fit(x,
                            upper=upper,
                            alpha=alpha,
                            weights=sample_weight,
-                           offset=offset,
+                           offset=as_null() if offset is None else offset,
                            #nfolds=nfolds,
                            foldid=foldid,
                            **{'type.measure': loss_metric})
