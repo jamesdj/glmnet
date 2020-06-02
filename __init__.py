@@ -1,7 +1,9 @@
 from .glmnet import (GLMNetLinearRegressionCV,
                      GLMNetLogisticRegressionCV,
-                     GLMNetMultinomialRegressionCV)
+                     GLMNetMultinomialRegressionCV,
+                     GLMNetPoissonRegressionCV)
 
 __all__ = [GLMNetLinearRegressionCV,
            GLMNetLogisticRegressionCV,
-           GLMNetMultinomialRegressionCV]
+           GLMNetMultinomialRegressionCV,
+           GLMNetPoissonRegressionCV]

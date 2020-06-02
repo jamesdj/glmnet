@@ -39,6 +39,7 @@ REG_TYPE2FAMILY = {
     'linear': 'gaussian',
     'logistic': 'binomial',
     'multinomial': 'multinomial',
+    'poisson': 'poisson',
 }
 
 CLASSIFICATION_REG_TYPES = ['logistic', 'multinomial']
@@ -93,7 +94,7 @@ class GLMNetCV(BaseEstimator):
         self.reg_type = None
         self.class_weight = None
 
-    def fit(self, x, y, sample_weight=None):
+    def fit(self, x, y, sample_weight=None, offset=None):
         """
         Fit generalized linear model.
 
@@ -105,6 +106,10 @@ class GLMNetCV(BaseEstimator):
             Target values
         sample_weight: array-like of shape (n_samples,), default=None
             Individual weights for each sample
+        offset: : array-like of shape (n_samples,), default=None
+            Fixed vector of n_samples numbers that is added into the linear
+             predictor. Can be output of another fitted model, or in the case
+             of Poisson regression, e.g. exposure times of each observation.
 
         Returns
         -------
@@ -122,7 +127,8 @@ class GLMNetCV(BaseEstimator):
                                 alpha=self.alpha,
                                 cv=self.cv,
                                 class_weight=self.class_weight,
-                                sample_weight=sample_weight)
+                                sample_weight=sample_weight,
+                                offset=offset)
 
         self.lambda_min = np.array(dollar(self.model, 'lambda.min'))[0]
         self.intercept_, self.coef_ = get_coeffs(self.model, lmda=self.lambda_min)
@@ -133,7 +139,8 @@ class GLMNetCV(BaseEstimator):
     @with_numpy2ri
     def _pred(self,
               x,
-              pred_type=None):
+              pred_type=None,
+              offset=None):
         """
         Base function for prediction
         
@@ -154,6 +161,7 @@ class GLMNetCV(BaseEstimator):
             pred_type = as_null()
         raw_pred = ro.r['predict'](self.model,
                                    newx=x_used,
+                                   newoffset=offset,
                                    s=self.lambda_min,
                                    type=pred_type)
         return raw_pred
@@ -171,7 +179,7 @@ class GLMNetClassifierCV(GLMNetCV, ClassifierMixin):
         self.reg_type = None
         self.class_weight = class_weight
 
-    def predict(self, x):
+    def predict(self, x, offset=None):
         """
         Predict class membership for each sample.
         
@@ -185,13 +193,16 @@ class GLMNetClassifierCV(GLMNetCV, ClassifierMixin):
         -------
         pred : array-like
             Predicted probabilities of class membership for each sample.
+        offset: : array-like of shape (n_samples,), default=None
+            Fixed vector of n_samples numbers that is added into the linear
+             predictor. Can be output of another fitted model.
 
         """
-        raw_pred = self._pred(x, pred_type='class')
+        raw_pred = self._pred(x, pred_type='class', offset=offset)
         pred = np.array(list(map(int, raw_pred)))
         return pred
 
-    def predict_proba(self, x):
+    def predict_proba(self, x, offset=None):
         """
         Predict probabilities of class membership for each sample.
         
@@ -199,13 +210,16 @@ class GLMNetClassifierCV(GLMNetCV, ClassifierMixin):
         ----------
         x: array-like of shape (n_samples, n_features)
             Data to predict from.
+        offset: : array-like of shape (n_samples,), default=None
+            Fixed vector of n_samples numbers that is added into the linear
+             predictor. Can be output of another fitted model.
 
         Returns
         -------
         pred_proba : array-like
             Predicted probabilities of class membership for each sample.
         """
-        raw_pred_proba = self._pred(x, pred_type='response')
+        raw_pred_proba = self._pred(x, pred_type='response', offset=offset)
         pred_proba = np.squeeze(np.array(raw_pred_proba))
         return pred_proba
 
@@ -221,7 +235,7 @@ class GLMNetRegressionCV(GLMNetCV, RegressorMixin):
         self.reg_type = None
         self.sample_weight = sample_weight
 
-    def predict(self, x):
+    def predict(self, x, offset=None):
         """
         Predict values for each sample.
         
@@ -229,13 +243,17 @@ class GLMNetRegressionCV(GLMNetCV, RegressorMixin):
         ----------
         x: array-like of shape (n_samples, n_features)
             Data to predict from.
+        offset: : array-like of shape (n_samples,), default=None
+            Fixed vector of n_samples numbers that is added into the linear
+             predictor. Can be output of another fitted model, or in the case
+             of Poisson regression, e.g. exposure times of each observation.
 
         Returns
         -------
         pred : array-like
             Predicted values for each sample
         """
-        raw_pred = self._pred(x)
+        raw_pred = self._pred(x, offset=offset)
         pred = np.array(raw_pred).T[0]
         return pred
 
@@ -277,6 +295,45 @@ class GLMNetLinearRegressionCV(GLMNetRegressionCV):
                          alpha=alpha,
                          cv=cv)
         self.reg_type = 'linear'
+
+
+class GLMNetPoissonRegressionCV(GLMNetRegressionCV):
+    """
+    Regularized Poisson regression tuned by cross-validation.
+
+    Parameters
+    ----------
+    lower: float, default=None
+        Lower bound on coefficients. E.g. lower=0 is non-negative regression
+    upper: float, default=None
+        Upper bound on coefficients
+    loss_metric: str, default='mse'
+        Which loss metric to minimize.
+    alpha: float, default=0.5
+        Balance of L1 and L2 regularization
+    cv: int, cross-validation generator or an iterable, optional, default=None
+        Determines the cross-validation splitting strategy. See documentation
+        for sklearn.model_selection.check_cv. Cross-validation strategies with
+        overlapping folds are not supported.
+
+
+    See Also
+    --------
+    https://web.stanford.edu/~hastie/glmnet/glmnet_alpha.html#poi
+    """
+
+    def __init__(self,
+                 lower=None,
+                 upper=None,
+                 loss_metric='mse',
+                 alpha=0.5,
+                 cv=None):
+        super().__init__(lower=lower,
+                         upper=upper,
+                         loss_metric=loss_metric,
+                         alpha=alpha,
+                         cv=cv)
+        self.reg_type = 'poisson'
 
 
 class GLMNetLogisticRegressionCV(GLMNetClassifierCV):
@@ -416,7 +473,8 @@ def glmnet_fit(x,
                alpha=0.5,
                cv=None,
                class_weight=None,
-               sample_weight=None):
+               sample_weight=None,
+               offset=None):
     """
     Fit generalized linear model in glmnet, tuning with cross-validation
 
@@ -468,6 +526,7 @@ def glmnet_fit(x,
                            upper=upper,
                            alpha=alpha,
                            weights=sample_weight,
+                           offset=offset,
                            #nfolds=nfolds,
                            foldid=foldid,
                            **{'type.measure': loss_metric})
