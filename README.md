@@ -6,7 +6,7 @@ The [glmnet](https://web.stanford.edu/~hastie/glmnet/glmnet_alpha.html) R packag
 It is highly optimized and tends to outdo other implementations 
 in both model performance and speed.  
 
-Currently supports basic linear, logistic, and multinomial (multi-class) models.
+Currently supports basic linear, logistic, multinomial (multi-class), and Poisson regression models.
 
 To install dependencies:
 ```

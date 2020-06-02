@@ -28,7 +28,7 @@ TODO:
 - more input validation etc.
 - enable multi-target regression
 - enable grouped option in multinomial
-- enable other regression models (Poisson, Cox)
+- enable Cox regression
 - expose other features such as the regularization path info
 - some valid loss_metric arguments such as 'auc' are not losses,
    and should be maximized, not minimized
