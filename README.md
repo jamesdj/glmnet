@@ -10,7 +10,7 @@ Currently supports basic linear, logistic, and multinomial (multi-class) models.
 
 To install dependencies:
 ```
-conda install numpy pandas scikit-learn rpy2
+conda install numpy pandas scikit-learn rpy2=2.9.4
 Rscript -e 'install.packages("glmnet", repos="https://cloud.r-project.org")'
 ```
 On some systems, it may be necessary to run
@@ -18,3 +18,5 @@ On some systems, it may be necessary to run
 conda install -c r libiconv
 ```
 prior to the `Rscript` command.
+
+Recent Rpy2 versions have problems with some type conversions.
